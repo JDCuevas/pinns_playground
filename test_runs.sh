@@ -1,19 +1,17 @@
 #!/bin/bash
 
-for N_u in 256 512 1024
+for Noise in 0.05 0.07 0.10
 do
-    for N_c in 5000 10000 15000 20000
+    for E in 6000 8000 10000 
     do
-        for Noise in 0.01 0.03 0.05 0.07
+        for BS in 1 2 4 8 
         do
-            for E in 6000 8000 10000 
+            for Boost in 60 80 100 150
             do
-                for BS in 2 4 8 
-                do
-                python train.py --e $E -bs $BS -n $Noise -h5 ./data/N_u_$N_u/N_c_$N_c/dataset.hdf5
-                done
+                python train_seed_u_v2.py -e $E -bs $BS -n $Noise -nb $Boost -rd ./results/parameters_u_seed_v2 -h5 ./data/N_u_256/N_c_10000/dataset.hdf5
             done
         done
     done
 done
+
 
