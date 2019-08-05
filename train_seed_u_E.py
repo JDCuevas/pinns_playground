@@ -44,8 +44,7 @@ with h5py.File(args.hdf5, 'r') as f:
     x_true = f.get(key_tree['x_true'])[()]
     E_true = f.get(key_tree['E_true'])[()]
     u_true = f.get(key_tree['u_true'])[()]
-    print(u_true)
-    print(E_true)
+
     # uniformly distributed collocation points
     x_c = f.get(key_tree['x_c'])[()]
     N_c = x_c.shape[0]
@@ -62,6 +61,13 @@ with h5py.File(args.hdf5, 'r') as f:
 
     # one BC for sigma
     x_S = f.get(key_tree['sigma_bc'])[()]
+
+    # one sample for nn_E
+    N_E = 1
+    x_E = np.random.random(N_E)
+    E_E = (1 + x_E) ** 2
+    x_E = x_E.reshape((-1, 1))
+    E_E = E_E.reshape((-1, 1))
 
 # Add Noise
 std_dev = args.noise * np.mean(u_u)
@@ -151,27 +157,19 @@ def train_step(u_batch, u_expected, u_bc, u_bc_expected, collocation_points, sig
         u_tape.watch(sigma_bc)
         E_tape.watch(collocation_points)
 
-        for i in range(args.nn_boost):
-            nn_pred_u = nn_u(u_batch, training=True)
-            nn_pred_u_D = nn_u(u_bc, training=True)
-
-            loss_u = mse(u_expected, nn_pred_u)
-            loss_u_D = mse(u_bc_expected, nn_pred_u_D)
-
-            u_joint_loss = loss_u + loss_u_D   
-
-            gradients_of_nn_u = u_tape.gradient(u_joint_loss, nn_u.trainable_variables)
-            optimizer.apply_gradients(zip(gradients_of_nn_u, nn_u.trainable_variables))
-
-        #nn_pred_u = nn_u(u_batch, traininnt_loss = loss_u + loss_u_D + loss_F + loss_S #g=True)
-        #nn_pred_u_D = nn_u(u_bc, training=True)
+        nn_pred_u = nn_u(u_batch, training=True)
+        nn_pred_u_D = nn_u(u_bc, training=True)
         nn_pred_u_c = nn_u(collocation_points,training=True)
         nn_pred_u_S = nn_u(sigma_bc, training=True)
         nn_pred_E_c = nn_E(collocation_points, training=True)
         nn_pred_E_S = nn_E(sigma_bc, training=True)
-        
-        #loss_u = mse(u_expected, nn_pred_u)
-        #loss_u_D = mse(u_bc_expected, nn_pred_u_D)
+        nn_pred_E_E = nn_E(x_E, training=True)
+
+        loss_u = mse(u_expected, nn_pred_u)
+        loss_u_D = mse(u_bc_expected, nn_pred_u_D)
+        loss_E = mse(E_E, nn_pred_E_E)
+
+
 
         u = nn_pred_u_c
         E = nn_pred_E_c
@@ -191,7 +189,7 @@ def train_step(u_batch, u_expected, u_bc, u_bc_expected, collocation_points, sig
 
         loss_S = mse(tf.constant(sigma), tf.multiply(E_S, tf.cast(du_dx_S, tf.float32)))
         
-        joint_loss = loss_F + loss_S
+        joint_loss = loss_F + loss_E + loss_u + loss_u_D  
         
     gradients_of_nn_u = u_tape.gradient(joint_loss, nn_u.trainable_variables)
     gradients_of_nn_E = E_tape.gradient(joint_loss, nn_E.trainable_variables)
@@ -265,8 +263,8 @@ train()
 predicted_u = nn_u.predict(x_c)
 predicted_E = nn_E.predict(x_c)
 
-plotting.plot_simple([(x_true, u_true), (x_c, predicted_u)], ['true', 'predicted'], "x", "u(x)", filename=model_dir + "u_plot.png", name='Displacement vs. Position')
-plotting.plot_simple([(x_true, E_true), (x_c, predicted_E)], ['true', 'predicted'], "x", "E(x)", filename=model_dir + "E_plot.png", name='Stiffness vs. Position')
+plotting.plot_simple([(x_true, u_true), (x_c, predicted_u)], ['true', 'predicted'], "x", "u", filename=model_dir + "u_plot.png", name='Displacement vs. Position')
+plotting.plot_simple([(x_true, E_true), (x_c, predicted_E)], ['true', 'predicted'], "x", "E", filename=model_dir + "E_plot.png", name='Stiffness vs. Position')
 
 # Accuracy Calculations
 predicted_u = nn_u.predict(x_c[:BATCH_SIZE])
